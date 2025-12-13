@@ -1,0 +1,5 @@
+{
+  "name": "Copy of CV Insight AI",
+  "description": "A professional resume analysis tool powered by Google Gemini 2.5 Flash. Get instant feedback on strengths, weaknesses, tailored project ideas, and suitable job recommendations.",
+  "requestFramePermissions": []
+}
