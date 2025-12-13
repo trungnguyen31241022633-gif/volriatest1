@@ -5,7 +5,7 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY ||
                 import.meta.env.GEMINI_API_KEY || 
                 'AIzaSyCwje8_h7rPN9_AjHG6QL8ELpRjv1IrQcg'; // Fallback
 
-const ai = new GoogleGenAI({ apiKey: AIzaSyCwje8_h7rPN9_AjHG6QL8ELpRjv1IrQcg });
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 export const analyzeCV = async (cvText: string, targetField?: string): Promise<string> => {
   try {
