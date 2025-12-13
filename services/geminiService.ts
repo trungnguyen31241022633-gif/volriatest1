@@ -1,6 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lấy API key từ environment variable
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 
+                import.meta.env.GEMINI_API_KEY || 
+                'AIzaSyBEvjArWMHTVJtmZUrdn1KL1Dpc40WhJSA'; // Fallback
+
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 export const analyzeCV = async (cvText: string, targetField?: string): Promise<string> => {
   try {
