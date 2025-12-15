@@ -1,4 +1,4 @@
-// api/analyze.js
+// api/analyze.js - Backend API Route (Vercel Serverless Function)
 import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -20,6 +20,7 @@ if (API_KEY) {
 }
 
 export default async (req, res) => {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -111,6 +112,7 @@ Trả lời định dạng Markdown, thân thiện, khích lệ.
   } catch (error) {
     console.error("❌ Backend Error:", error);
 
+    // Trả về JSON response hợp lệ luôn
     const errorMessage = error?.message || "Không xác định được lỗi";
     
     if (errorMessage.includes("API key")) {
