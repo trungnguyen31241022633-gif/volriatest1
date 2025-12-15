@@ -1,13 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Lấy API key từ environment variable
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 
-                import.meta.env.GEMINI_API_KEY || 
-                'AIzaSyBEvjArWMHTVJtmZUrdn1KL1Dpc40WhJSA'; // Fallback
+// Lấy API key từ environment variable (đã setup trên Vercel)
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+console.log("API Key Status:", API_KEY ? "✅ Loaded" : "❌ Not Found");
+
+let ai: any = null;
+
+// Khởi tạo AI client an toàn
+if (API_KEY) {
+  try {
+    ai = new GoogleGenAI({ apiKey: API_KEY });
+  } catch (error) {
+    console.error("Failed to initialize GoogleGenAI:", error);
+  }
+}
 
 export const analyzeCV = async (cvText: string, targetField?: string): Promise<string> => {
+  if (!API_KEY) {
+    throw new Error("❌ API key chưa được cấu hình trên Vercel. Vui lòng thêm VITE_GEMINI_API_KEY vào Environment Variables.");
+  }
+
+  if (!ai) {
+    throw new Error("❌ Lỗi khởi tạo AI service. Vui lòng kiểm tra lại API key.");
+  }
+
   try {
     const targetContext = targetField 
       ? `\n\n📢 **LƯU Ý QUAN TRỌNG**: Ứng viên này đang mong muốn phát triển sự nghiệp theo hướng: **"${targetField}"**. Hãy tập trung đánh giá sự phù hợp của hồ sơ với hướng đi này.` 
@@ -42,19 +59,49 @@ ${cvText}
 ---
 `;
 
+    console.log("🔄 Đang gọi Gemini API...");
+    
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
-    return response.text || "Không thể phân tích CV này. Vui lòng thử lại sau.";
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw new Error("Có lỗi xảy ra khi kết nối với AI. Vui lòng kiểm tra lại.");
+    if (!response || !response.text) {
+      throw new Error("API trả về response trống");
+    }
+
+    console.log("✅ Phân tích thành công");
+    return response.text;
+    
+  } catch (error: any) {
+    console.error("❌ Gemini API Error:", error);
+    
+    // Xử lý các lỗi cụ thể
+    if (error.message?.includes("API key")) {
+      throw new Error("❌ API key không hợp lệ hoặc hết hạn. Vui lòng kiểm tra lại.");
+    }
+    
+    if (error.message?.includes("401")) {
+      throw new Error("❌ Không được phép (401). API key có thể bị lỗi hoặc hết hạn.");
+    }
+
+    if (error.message?.includes("429")) {
+      throw new Error("❌ Quá nhiều yêu cầu. Vui lòng chờ vài giây rồi thử lại.");
+    }
+
+    throw new Error(`❌ Lỗi AI: ${error.message || "Không xác định được lỗi"}`);
   }
 };
 
 export const suggestExploration = async (interests: string[]): Promise<string> => {
+  if (!API_KEY) {
+    throw new Error("❌ API key chưa được cấu hình.");
+  }
+
+  if (!ai) {
+    throw new Error("❌ Lỗi khởi tạo AI service.");
+  }
+
   try {
     const prompt = `
 Tôi là sinh viên và chưa có định hướng rõ ràng, nhưng tôi có quan tâm đến các lĩnh vực sau: ${interests.join(", ")}.
@@ -67,14 +114,22 @@ Hãy đóng vai người cố vấn (Mentor), đưa ra lời khuyên ngắn gọ
 Trả lời định dạng Markdown, thân thiện, khích lệ.
 `;
     
+    console.log("🔄 Đang gợi ý lộ trình...");
+    
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
-    return response.text || "Không thể đưa ra gợi ý lúc này.";
-  } catch (error) {
-    console.error("Gemini API Error (Exploration):", error);
-    throw new Error("Có lỗi khi gọi AI tư vấn.");
+    if (!response || !response.text) {
+      throw new Error("API trả về response trống");
+    }
+
+    console.log("✅ Gợi ý thành công");
+    return response.text;
+    
+  } catch (error: any) {
+    console.error("❌ Gemini API Error (Exploration):", error);
+    throw new Error(`❌ Lỗi gợi ý: ${error.message || "Không xác định được lỗi"}`);
   }
 };
