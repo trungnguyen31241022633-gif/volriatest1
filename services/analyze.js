@@ -3,11 +3,21 @@ import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
+console.log("API_KEY loaded:", API_KEY ? "✅ Yes" : "❌ No");
+
 if (!API_KEY) {
   console.error("❌ GEMINI_API_KEY not found in environment variables");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+let ai = null;
+if (API_KEY) {
+  try {
+    ai = new GoogleGenAI({ apiKey: API_KEY });
+    console.log("✅ GoogleGenAI initialized");
+  } catch (error) {
+    console.error("Failed to initialize GoogleGenAI:", error);
+  }
+}
 
 export default async (req, res) => {
   // CORS headers
@@ -21,6 +31,12 @@ export default async (req, res) => {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!ai) {
+    return res.status(500).json({ 
+      error: '❌ AI service không được khởi tạo. Kiểm tra GEMINI_API_KEY.' 
+    });
   }
 
   try {
@@ -96,20 +112,23 @@ Trả lời định dạng Markdown, thân thiện, khích lệ.
   } catch (error) {
     console.error("❌ Backend Error:", error);
 
-    if (error.message?.includes("API key")) {
+    // Trả về JSON response hợp lệ luôn
+    const errorMessage = error?.message || "Không xác định được lỗi";
+    
+    if (errorMessage.includes("API key")) {
       return res.status(500).json({ 
         error: "❌ API key không hợp lệ hoặc hết hạn. Liên hệ quản trị viên." 
       });
     }
 
-    if (error.message?.includes("429")) {
+    if (errorMessage.includes("429")) {
       return res.status(429).json({ 
         error: "❌ Quá nhiều yêu cầu. Vui lòng chờ vài giây rồi thử lại." 
       });
     }
 
     return res.status(500).json({ 
-      error: `Lỗi: ${error.message || "Không xác định được lỗi"}` 
+      error: `Lỗi: ${errorMessage}` 
     });
   }
 };
