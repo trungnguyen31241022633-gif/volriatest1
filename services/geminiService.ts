@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 // Lấy API key từ environment variable (đã setup trên Vercel)
+// Tên biến: GEMINI_API_KEY (không có prefix VITE_)
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyBYoUPwNclByF-LZrss2cp3SOBsQFMjp1A";
 
 console.log("API Key Status:", API_KEY ? "✅ Loaded" : "❌ Not Found");
