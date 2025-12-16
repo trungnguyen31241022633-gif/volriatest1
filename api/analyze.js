@@ -80,7 +80,7 @@ export default async (req, res) => {
 
   if (API_KEYS.length === 0) {
     return res.status(500).json({ 
-      error: '❌ AI service không được khởi tạo. Kiểm tra GEMINI_API_KEY trong Vercel Environment Variables.' 
+      error: '❌ AI service không được khởi tạo. Kiểm tra GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3, GEMINI_API_KEY_4 trong Vercel Environment Variables.' 
     });
   }
 
