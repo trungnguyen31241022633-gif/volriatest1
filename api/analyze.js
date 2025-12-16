@@ -25,8 +25,8 @@ const getNextApiKey = () => {
   return key;
 };
 
-// Hàm thử gọi API với retry logic
-const callGeminiWithRetry = async (prompt, modelName = 'gemini-2.5-flash') => {
+// Hàm thử gọi API với retry logic và exponential backoff
+const callGeminiWithRetry = async (prompt, modelName = 'gemini-1.5-flash') => {
   let lastError = null;
   const maxRetries = API_KEYS.length; // Thử tất cả keys một lần
 
@@ -52,35 +52,52 @@ const callGeminiWithRetry = async (prompt, modelName = 'gemini-2.5-flash') => {
       lastError = error;
       const keyPreview = API_KEYS[currentKeyIndex === 0 ? API_KEYS.length - 1 : currentKeyIndex - 1].substring(0, 20) + '...';
       
-      console.error(`❌ Key ${keyPreview} failed with error:`, {
+      console.error(`❌ Key ${keyPreview} failed:`, {
         message: error.message,
         status: error.status,
-        code: error.code,
-        details: error.details || error.response?.data
+        code: error.code
       });
       
-      // Nếu lỗi không phải do rate limit/quota, dừng ngay
-      const isRetryableError = 
+      // Kiểm tra loại lỗi
+      const isRateLimitError = 
         error.message.includes('429') || 
         error.message.includes('quota') ||
         error.message.includes('RESOURCE_EXHAUSTED') ||
         error.status === 429;
       
-      if (!isRetryableError) {
-        console.error(`🛑 Non-retryable error detected. Stopping retry.`);
+      const isInvalidKeyError =
+        error.message.includes('API_KEY_INVALID') ||
+        error.message.includes('invalid api key') ||
+        error.status === 400;
+        
+      const isPermissionError =
+        error.message.includes('PERMISSION_DENIED') ||
+        error.status === 403;
+      
+      // Nếu key invalid hoặc permission denied, thử key khác ngay
+      if (isInvalidKeyError || isPermissionError) {
+        console.log(`🔄 Key invalid/no permission, trying next key immediately...`);
+        continue;
+      }
+      
+      // Nếu không phải rate limit, dừng luôn
+      if (!isRateLimitError) {
+        console.error(`🛑 Non-retryable error. Stopping.`);
         throw error;
       }
       
-      // Chờ 1 giây trước khi thử key tiếp theo
+      // Nếu là rate limit, thử key tiếp theo với delay tăng dần
       if (attempt < maxRetries - 1) {
-        console.log(`⏳ Waiting 1 second before trying next key...`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000); // Max 5 seconds
+        console.log(`⏳ Rate limited. Waiting ${waitTime}ms before trying next key...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   }
 
   // Nếu tất cả keys đều fail
-  throw new Error(`All API keys exhausted. Last error: ${lastError?.message || 'Unknown error'}`);
+  const errorDetails = lastError?.message || 'Unknown error';
+  throw new Error(`All ${API_KEYS.length} API keys exhausted. Last error: ${errorDetails}`);
 };
 
 export default async (req, res) => {
