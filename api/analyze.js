@@ -1,23 +1,69 @@
 // api/analyze.js
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.GEMINI_API_KEY || "AIzaSyD7AeKpUGuKN1-XnCFVU5UCuFS1i1jgOR8";
+// Lấy tất cả API keys từ environment variables
+const API_KEYS = [
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4
+].filter(Boolean); // Lọc bỏ các giá trị undefined/null
 
-console.log("API_KEY loaded:", API_KEY ? "✅ Yes" : "❌ No");
+console.log(`✅ Loaded ${API_KEYS.length} API keys`);
 
-if (!API_KEY) {
-  console.error("❌ GEMINI_API_KEY not found in environment variables");
+if (API_KEYS.length === 0) {
+  console.error("❌ No API keys found in environment variables");
 }
 
-let ai = null;
-if (API_KEY) {
-  try {
-    ai = new GoogleGenAI({ apiKey: API_KEY });
-    console.log("✅ GoogleGenAI initialized");
-  } catch (error) {
-    console.error("Failed to initialize GoogleGenAI:", error);
+// Biến đếm để xoay vòng keys
+let currentKeyIndex = 0;
+
+// Hàm lấy API key theo vòng quay
+const getNextApiKey = () => {
+  const key = API_KEYS[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
+  return key;
+};
+
+// Hàm thử gọi API với retry logic
+const callGeminiWithRetry = async (prompt, modelName = 'gemini-2.5-flash') => {
+  let lastError = null;
+  const maxRetries = API_KEYS.length; // Thử tất cả keys một lần
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const apiKey = getNextApiKey();
+      console.log(`🔄 Attempt ${attempt + 1}/${maxRetries} - Using key index: ${currentKeyIndex === 0 ? API_KEYS.length : currentKeyIndex}`);
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+      });
+
+      if (response && response.text) {
+        console.log(`✅ Success with key index: ${currentKeyIndex === 0 ? API_KEYS.length : currentKeyIndex}`);
+        return response.text;
+      }
+    } catch (error) {
+      lastError = error;
+      console.warn(`⚠️ Key ${currentKeyIndex === 0 ? API_KEYS.length : currentKeyIndex} failed:`, error.message);
+      
+      // Nếu lỗi không phải do rate limit, dừng ngay
+      if (!error.message.includes('429') && !error.message.includes('quota')) {
+        throw error;
+      }
+      
+      // Chờ 1 giây trước khi thử key tiếp theo
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
   }
-}
+
+  // Nếu tất cả keys đều fail
+  throw new Error(`All API keys exhausted. Last error: ${lastError?.message || 'Unknown error'}`);
+};
 
 export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,9 +78,9 @@ export default async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!ai) {
+  if (API_KEYS.length === 0) {
     return res.status(500).json({ 
-      error: '❌ AI service không được khởi tạo. Kiểm tra GEMINI_API_KEY.' 
+      error: '❌ AI service không được khởi tạo. Kiểm tra GEMINI_API_KEY trong Vercel Environment Variables.' 
     });
   }
 
@@ -63,7 +109,7 @@ Nhiệm vụ của bạn là cung cấp một báo cáo gồm 4 phần chính, s
    - Liệt kê 5-7 điểm mạnh nổi bật nhất về kỹ năng, kinh nghiệm hoặc tư duy của ứng viên.
    ${targetField ? `- Đánh giá xem những điểm mạnh này có hỗ trợ tốt cho mục tiêu "${targetField}" hay không.` : ""}
 
-2. 🔻 **Điểm yếu & Cải thiện (Weaknesses)**
+2. 📉 **Điểm yếu & Cải thiện (Weaknesses)**
    - Chỉ ra 3-5 điểm hạn chế hoặc thiếu sót trong CV (đặc biệt nếu so với tiêu chuẩn của ngành ${targetField || "liên quan"}).
    - Gợi ý cách khắc phục cụ thể để hồ sơ ấn tượng hơn.
 
@@ -94,19 +140,12 @@ Trả lời định dạng Markdown, thân thiện, khích lệ.
 `;
     }
 
-    console.log("🔄 Gọi Gemini API từ backend...");
+    console.log("📤 Gọi Gemini API với key rotation...");
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-
-    if (!response || !response.text) {
-      throw new Error("API trả về response trống");
-    }
+    const text = await callGeminiWithRetry(prompt);
 
     console.log("✅ Phân tích thành công");
-    return res.status(200).json({ text: response.text });
+    return res.status(200).json({ text });
 
   } catch (error) {
     console.error("❌ Backend Error:", error);
@@ -119,9 +158,9 @@ Trả lời định dạng Markdown, thân thiện, khích lệ.
       });
     }
 
-    if (errorMessage.includes("429")) {
+    if (errorMessage.includes("429") || errorMessage.includes("quota")) {
       return res.status(429).json({ 
-        error: "❌ Quá nhiều yêu cầu. Vui lòng chờ vài giây rồi thử lại." 
+        error: "❌ Tất cả API keys đã đạt giới hạn. Vui lòng thử lại sau." 
       });
     }
 
